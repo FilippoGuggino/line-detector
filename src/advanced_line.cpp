@@ -25,16 +25,33 @@ static qreal distanceToLineSegment(const QPoint& p, const QPoint& p1, const QPoi
     return QLineF(p, projection).length();
 }
 
+static std::vector<RectangleProperties> linspace(double start, double end, unsigned int num, bool endpoint = false)
+{
+    std::vector<RectangleProperties> out;
+    if (endpoint) {
+        out.push_back(RectangleProperties{ start });
+    }
+
+    double step = endpoint == false ? 1.0 / (num + 1) : 1.0 / (num - 1);
+    for (int i = 0; i < num; i++) {
+        out.push_back(RectangleProperties{ (i + 1) * step });
+    }
+
+    if (endpoint) {
+        out.push_back(RectangleProperties{ end });
+    }
+
+    return out;
+}
+
 AdvancedLine::AdvancedLine(const QPoint& start, const QPoint& end)
     : m_start_point(start)
     , m_end_point(end)
     , m_shared_rect_width(60.0)
     , m_shared_rect_height(40.0)
 {
-    double step = 1.0 / (m_num_rects + 1);
-    for (int i = 0; i < m_num_rects; i++) {
-        m_rects.push_back(RectangleProperties{ (i + 1) * step });
-    }
+
+    m_rects = linspace(0.0, 1.0, m_num_rects);
 }
 
 void AdvancedLine::paint(QPainter* painter) const
@@ -195,4 +212,10 @@ void AdvancedLine::update_cursor(const QPoint& pos, QWidget* parent)
         // Bonus: check for hover cursor (not implemented to keep it simple, but this is where it would go)
         parent->setCursor(Qt::ArrowCursor);
     }
+}
+
+void AdvancedLine::set_num_rects(unsigned int num_rects)
+{
+    m_num_rects = num_rects;
+    m_rects = linspace(0.0, 1.0, m_num_rects);
 }

@@ -21,6 +21,7 @@ public:
     void handle_mouse_move(const QPoint& pos);
     void handle_mouse_release();
     void update_cursor(const QPoint& pos, QWidget* parent);
+    void set_num_rects(unsigned int num_rects);
 
 private:
     // Enum and struct for managing internal drag state
