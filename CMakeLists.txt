@@ -40,6 +40,8 @@ FetchContent_MakeAvailable(argparse)
 # find_package(spdlog)
 add_executable(${PROJECT_NAME}
   src/main.cpp
+  src/display_widget.cpp
+  src/advanced_line.cpp
 )
 
 if(WIN32)
