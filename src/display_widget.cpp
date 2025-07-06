@@ -21,8 +21,8 @@ void DisplayWidget::paintEvent(QPaintEvent* event)
     painter.setRenderHint(QPainter::Antialiasing);
 
     // Tell each line object to draw itself
-    for (const auto& lineObject : m_advanced_lines) {
-        lineObject.paint(&painter);
+    for (const auto& line_object : m_advanced_lines) {
+        line_object.paint(&painter);
     }
 }
 
@@ -43,21 +43,39 @@ void DisplayWidget::mouseMoveEvent(QMouseEvent* event)
 {
     if (m_active_line) {
         m_active_line->handle_mouse_move(event->pos());
-        m_active_line->update_cursor(event->pos(), this);
         update();
     }
-    else {
-        // No object is being dragged, so just set the default cursor
-        setCursor(Qt::ArrowCursor);
+
+    Qt::CursorShape current_cursor = Qt::ArrowCursor;
+
+    if (m_active_line) {
+        // If dragging, get the cursor from the active line
+        current_cursor = m_active_line->get_cursor_for_position(event->pos());
     }
+    else {
+        // If not dragging (hovering), check all lines to see if we are over one
+        // Iterate backwards so the top-most object is checked first
+        for (int i = m_advanced_lines.size() - 1; i >= 0; --i) {
+            Qt::CursorShape shape = m_advanced_lines[i].get_cursor_for_position(event->pos());
+            if (shape != Qt::ArrowCursor) {
+                current_cursor = shape;
+                break; // Found an object to interact with, stop checking
+            }
+        }
+    }
+
+    setCursor(current_cursor);
 }
 
 void DisplayWidget::mouseReleaseEvent(QMouseEvent* event)
 {
+    Q_UNUSED(event);
     if (m_active_line) {
         m_active_line->handle_mouse_release();
         m_active_line = nullptr;
-        setCursor(Qt::ArrowCursor);
+        // After release, we might be hovering over something else, so we need to
+        // re-evaluate the cursor for the new position.
+        mouseMoveEvent(event);
         update();
     }
 }

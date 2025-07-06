@@ -1,12 +1,10 @@
 #ifndef ADVANCED_LINE_H
 #define ADVANCED_LINE_H
 
-#include <QMouseEvent>
-#include <QObject>
 #include <QPainter>
 #include <QPoint>
+#include <vector>
 
-// A simple struct for rectangle properties along the line
 struct RectangleProperties {
     qreal position_on_line = 0.5;
 };
@@ -15,21 +13,27 @@ class AdvancedLine {
 public:
     AdvancedLine(const QPoint& start, const QPoint& end);
 
-    // Public interface for the DisplayWidget to use
     void paint(QPainter* painter) const;
     bool handle_mouse_press(const QPoint& pos);
     void handle_mouse_move(const QPoint& pos);
     void handle_mouse_release();
-    void update_cursor(const QPoint& pos, QWidget* parent);
+    Qt::CursorShape get_cursor_for_position(const QPoint& pos) const;
+
     void set_num_rects(unsigned int num_rects);
 
 private:
-    // Enum and struct for managing internal drag state
-    enum class Handle { None,
+    enum class Handle {
+        None,
         Left,
         Right,
         Top,
-        Bottom };
+        Bottom,
+        TopLeft,
+        TopRight,
+        BottomLeft,
+        BottomRight,
+        Body
+    };
 
     struct DragState {
         bool dragging = false;
@@ -40,7 +44,8 @@ private:
         QPoint drag_start_offset;
     };
 
-    // Data for this specific line object
+    Handle get_handle_at_position(const QPoint& pos, int& rect_index) const;
+
     QPoint m_start_point;
     QPoint m_end_point;
     unsigned int m_num_rects = 4;

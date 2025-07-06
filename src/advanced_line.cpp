@@ -5,13 +5,13 @@
 
 #include "advanced_line.h"
 
-static bool isNearPoint(const QPoint& point, const QPoint& target)
+static bool is_near_point(const QPoint& point, const QPoint& target)
 {
     const int threshold = 10;
     return (point - target).manhattanLength() < threshold;
 }
 
-static qreal distanceToLineSegment(const QPoint& p, const QPoint& p1, const QPoint& p2)
+static qreal distance_to_line_segment(const QPoint& p, const QPoint& p1, const QPoint& p2)
 {
     QLineF line(p1, p2);
     qreal line_length_sq = line.length() * line.length();
@@ -28,17 +28,17 @@ static qreal distanceToLineSegment(const QPoint& p, const QPoint& p1, const QPoi
 static std::vector<RectangleProperties> linspace(double start, double end, unsigned int num, bool endpoint = false)
 {
     std::vector<RectangleProperties> out;
-    if (endpoint) {
+    if (num == 0)
+        return out;
+    if (endpoint && num == 1) {
         out.push_back(RectangleProperties{ start });
+        return out;
     }
 
-    double step = endpoint == false ? 1.0 / (num + 1) : 1.0 / (num - 1);
-    for (int i = 0; i < num; i++) {
-        out.push_back(RectangleProperties{ (i + 1) * step });
-    }
-
-    if (endpoint) {
-        out.push_back(RectangleProperties{ end });
+    double step = endpoint ? 1.0 / (num - 1) : 1.0 / (num + 1);
+    for (unsigned int i = 0; i < num; i++) {
+        double position = endpoint ? i * step : (i + 1) * step;
+        out.push_back(RectangleProperties{ position });
     }
 
     return out;
@@ -90,58 +90,103 @@ void AdvancedLine::paint(QPainter* painter) const
     painter->restore();
 }
 
-bool AdvancedLine::handle_mouse_press(const QPoint& pos)
+// This function centralizes all hit-testing logic. It checks for handles on
+// endpoints, the line, and rectangle borders/corners.
+AdvancedLine::Handle AdvancedLine::get_handle_at_position(const QPoint& pos, int& rect_index_out) const
 {
-    // Reset internal state before checking for a new press
-    m_drag_state = DragState();
+    rect_index_out = -1;
 
-    if (isNearPoint(pos, m_start_point)) {
-        m_drag_state.dragging = true;
-        m_drag_state.line_point = &m_start_point;
-        return true;
+    // Check endpoints first (highest priority)
+    if (is_near_point(pos, m_start_point) || is_near_point(pos, m_end_point)) {
+        return Handle::Body;
     }
-    if (isNearPoint(pos, m_end_point)) {
-        m_drag_state.dragging = true;
-        m_drag_state.line_point = &m_end_point;
-        return true;
+
+    if (distance_to_line_segment(pos, m_start_point, m_end_point) < 5.0) {
+        return Handle::Body;
     }
 
     QLineF line(m_start_point, m_end_point);
     qreal angle = line.angle();
-    const int resizeHandleSize = 10;
+    const int resize_handle_size = 8; // Area around borders to detect hover/click
+
+    // Check rectangles
     for (int i = 0; i < m_num_rects; ++i) {
         QPointF center_point = line.pointAt(m_rects[i].position_on_line);
+
+        // Transform mouse position into the rectangle's local coordinate system
         QTransform transform;
         transform.translate(center_point.x(), center_point.y());
         transform.rotate(-angle);
         QPointF local_pos = transform.inverted().map(QPointF(pos));
 
-        if (qAbs(local_pos.x()) < m_shared_rect_width / 2 + resizeHandleSize && qAbs(local_pos.y()) < m_shared_rect_height / 2 + resizeHandleSize) {
-            if (qAbs(local_pos.x() - m_shared_rect_width / 2) < resizeHandleSize)
-                m_drag_state.handle = Handle::Right;
-            else if (qAbs(local_pos.x() + m_shared_rect_width / 2) < resizeHandleSize)
-                m_drag_state.handle = Handle::Left;
-            else if (qAbs(local_pos.y() - m_shared_rect_height / 2) < resizeHandleSize)
-                m_drag_state.handle = Handle::Bottom;
-            else if (qAbs(local_pos.y() + m_shared_rect_height / 2) < resizeHandleSize)
-                m_drag_state.handle = Handle::Top;
+        // Create a slightly larger rect for initial broad-phase check
+        QRectF hover_rect = QRectF(-m_shared_rect_width / 2, -m_shared_rect_height / 2, m_shared_rect_width, m_shared_rect_height)
+                                .adjusted(-resize_handle_size, -resize_handle_size, resize_handle_size, resize_handle_size);
 
-            if (m_drag_state.handle != Handle::None) {
-                m_drag_state.dragging = true;
-                m_drag_state.rect_index = i;
-                return true;
-            }
+        if (hover_rect.contains(local_pos)) {
+            rect_index_out = i;
+            qreal half_w = m_shared_rect_width / 2;
+            qreal half_h = m_shared_rect_height / 2;
+
+            // --- CORNER CHECKS (HIGHEST PRIORITY) ---
+            if (QRectF(half_w - resize_handle_size, -half_h - resize_handle_size, resize_handle_size * 2, resize_handle_size * 2).contains(local_pos))
+                return Handle::TopRight;
+            if (QRectF(-half_w - resize_handle_size, -half_h - resize_handle_size, resize_handle_size * 2, resize_handle_size * 2).contains(local_pos))
+                return Handle::TopLeft;
+            if (QRectF(half_w - resize_handle_size, half_h - resize_handle_size, resize_handle_size * 2, resize_handle_size * 2).contains(local_pos))
+                return Handle::BottomRight;
+            if (QRectF(-half_w - resize_handle_size, half_h - resize_handle_size, resize_handle_size * 2, resize_handle_size * 2).contains(local_pos))
+                return Handle::BottomLeft;
+
+            // --- BORDER CHECKS ---
+            if (qAbs(local_pos.x() - half_w) < resize_handle_size)
+                return Handle::Right;
+            if (qAbs(local_pos.x() + half_w) < resize_handle_size)
+                return Handle::Left;
+            if (qAbs(local_pos.y() - half_h) < resize_handle_size)
+                return Handle::Bottom;
+            if (qAbs(local_pos.y() + half_h) < resize_handle_size)
+                return Handle::Top;
         }
     }
 
-    if (distanceToLineSegment(pos, m_start_point, m_end_point) < 5.0) {
-        m_drag_state.dragging = true;
-        m_drag_state.is_dragging_line = true;
-        m_drag_state.drag_start_offset = pos - m_start_point;
-        return true;
+    return Handle::None;
+}
+
+bool AdvancedLine::handle_mouse_press(const QPoint& pos)
+{
+    m_drag_state = DragState(); // Reset state
+
+    int rect_index = -1;
+    Handle handle = get_handle_at_position(pos, rect_index);
+
+    if (handle == Handle::None) {
+        return false; // This object was not clicked
     }
 
-    return false; // This object was not clicked
+    m_drag_state.dragging = true;
+
+    if (rect_index != -1) {
+        // A rectangle part was clicked
+        m_drag_state.rect_index = rect_index;
+        m_drag_state.handle = handle;
+    }
+    else {
+        // A line part was clicked
+        if (is_near_point(pos, m_start_point)) {
+            m_drag_state.line_point = &m_start_point;
+        }
+        else if (is_near_point(pos, m_end_point)) {
+            m_drag_state.line_point = &m_end_point;
+        }
+        else {
+            // The line body was clicked
+            m_drag_state.is_dragging_line = true;
+            m_drag_state.drag_start_offset = pos - m_start_point;
+        }
+    }
+
+    return true;
 }
 
 void AdvancedLine::handle_mouse_move(const QPoint& pos)
@@ -181,6 +226,22 @@ void AdvancedLine::handle_mouse_move(const QPoint& pos)
         case Handle::Bottom:
             m_shared_rect_height = qMax(10.0, local_pos.y() * 2);
             break;
+        case Handle::TopLeft:
+            m_shared_rect_width = qMax(10.0, -local_pos.x() * 2);
+            m_shared_rect_height = qMax(10.0, -local_pos.y() * 2);
+            break;
+        case Handle::TopRight:
+            m_shared_rect_width = qMax(10.0, local_pos.x() * 2);
+            m_shared_rect_height = qMax(10.0, -local_pos.y() * 2);
+            break;
+        case Handle::BottomLeft:
+            m_shared_rect_width = qMax(10.0, -local_pos.x() * 2);
+            m_shared_rect_height = qMax(10.0, local_pos.y() * 2);
+            break;
+        case Handle::BottomRight:
+            m_shared_rect_width = qMax(10.0, local_pos.x() * 2);
+            m_shared_rect_height = qMax(10.0, local_pos.y() * 2);
+            break;
         default:
             break;
         }
@@ -192,26 +253,74 @@ void AdvancedLine::handle_mouse_release()
     m_drag_state = DragState(); // Reset drag state
 }
 
-void AdvancedLine::update_cursor(const QPoint& pos, QWidget* parent)
+// private helper function to select the best cursor for a given angle.
+// Angles are 0-360, with 0 pointing right (3 o'clock).
+static Qt::CursorShape map_angle_to_cursor(qreal angle)
 {
-    if (!parent)
-        return;
+    angle = fmod(angle, 180.0);
+    if (angle < 0) {
+        angle += 180.0;
+    }
+    std::cout << " angle after: " << angle << std::endl;
 
-    if (m_drag_state.dragging) {
-        if (m_drag_state.line_point || m_drag_state.is_dragging_line) {
-            parent->setCursor(Qt::SizeAllCursor);
-        }
-        else if (m_drag_state.handle == Handle::Left || m_drag_state.handle == Handle::Right) {
-            parent->setCursor(Qt::SizeHorCursor);
-        }
-        else {
-            parent->setCursor(Qt::SizeVerCursor);
-        }
+    // Check which 45-degree slice the angle falls into
+    if ((angle >= 0.0 && angle < 22.5) || (angle >= 157.5 && angle < 180.0)) {
+        return Qt::SizeHorCursor; // Horizontal
     }
-    else {
-        // Bonus: check for hover cursor (not implemented to keep it simple, but this is where it would go)
-        parent->setCursor(Qt::ArrowCursor);
+    else if (angle >= 22.5 && angle < 67.5) {
+        return Qt::SizeBDiagCursor; // Diagonal '\'
     }
+    else if (angle >= 67.5 && angle < 112.5) {
+        return Qt::SizeVerCursor; // Vertical
+    }
+    else { // angle >= 112.5 && angle < 157.5
+        return Qt::SizeFDiagCursor; // Diagonal '/'
+    }
+}
+
+Qt::CursorShape AdvancedLine::get_cursor_for_position(const QPoint& pos) const
+{
+    int rect_index = -1;
+    Handle handle = get_handle_at_position(pos, rect_index);
+
+    // Handle non-resizable parts first
+    if (handle == Handle::None) {
+        return Qt::ArrowCursor;
+    }
+    if (handle == Handle::Body) {
+        return Qt::SizeAllCursor;
+    }
+
+    // For resizable handles, calculate the appropriate rotated cursor
+    QLineF line(m_start_point, m_end_point);
+    qreal line_angle = line.angle(); // Angle of the line itself
+
+    qreal handle_base_angle = 0.0;
+    switch (handle) {
+    case Handle::Top:
+    case Handle::Bottom:
+        handle_base_angle = 90.0; // Perpendicular to the line
+        break;
+    case Handle::Left:
+    case Handle::Right:
+        handle_base_angle = 0.0; // Parallel to the line
+        break;
+    case Handle::TopLeft:
+    case Handle::BottomRight:
+        handle_base_angle = 135.0; // Diagonal '\' relative to the line
+        break;
+    case Handle::TopRight:
+    case Handle::BottomLeft:
+        handle_base_angle = 45.0; // Diagonal '/' relative to the line
+        break;
+    default:
+        return Qt::ArrowCursor;
+    }
+
+    // The final cursor angle is the sum of the line's angle and the handle's base angle.
+    qreal final_cursor_angle = line_angle + handle_base_angle;
+
+    return map_angle_to_cursor(final_cursor_angle);
 }
 
 void AdvancedLine::set_num_rects(unsigned int num_rects)
