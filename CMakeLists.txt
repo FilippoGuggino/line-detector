@@ -42,7 +42,7 @@ FetchContent_MakeAvailable(argparse)
 add_executable(${PROJECT_NAME}
   src/main.cpp
   src/display_widget.cpp
-  src/advanced_line.cpp
+  src/advanced_line_item.cpp
 )
 
 if(WIN32)
