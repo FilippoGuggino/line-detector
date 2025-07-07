@@ -119,6 +119,8 @@ void AdvancedLineItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* 
 
 void AdvancedLineItem::mousePressEvent(QGraphicsSceneMouseEvent* event)
 {
+    get_rect_regions();
+
     m_drag_state = DragState();
 
     int rect_index = -1;
@@ -366,4 +368,33 @@ void AdvancedLineItem::set_num_rects(unsigned int num_rects)
     m_num_rects = num_rects;
     m_rects = linspace(0.0, 1.0, m_num_rects);
     update();
+}
+
+std::vector<QPointF> AdvancedLineItem::get_rect_regions() const
+{
+    QLineF line(m_start_point, m_end_point);
+    qreal angle = line.angle();
+
+    for (const auto& rect : m_rects) {
+        QPointF center_point = line.pointAt(rect.position_on_line);
+        QRectF rectangle(-m_shared_rect_width / 2, -m_shared_rect_height / 2, m_shared_rect_width, m_shared_rect_height);
+
+        QPointF top_left = rectangle.topLeft();
+        QPointF top_right = rectangle.topRight();
+        QPointF bottom_left = rectangle.bottomLeft();
+        QPointF bottom_right = rectangle.bottomRight();
+
+        QTransform transform;
+        transform.rotate(-angle, Qt::XAxis);
+        transform.translate(center_point.x(), center_point.y());
+
+        QPointF top_left_transformed = transform.map(top_left);
+        QPointF top_right_transformed = transform.map(top_right);
+        QPointF bottom_left_transformed = transform.map(bottom_left);
+        QPointF bottom_right_transformed = transform.map(bottom_right);
+
+        qDebug() << top_left_transformed << top_right_transformed << bottom_left_transformed << bottom_right_transformed;
+    }
+
+    return std::vector<QPointF>();
 }

@@ -38,6 +38,7 @@ public:
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget = nullptr) override;
 
     void set_num_rects(unsigned int num_rects);
+    std::vector<QPointF> get_rect_regions() const;
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
