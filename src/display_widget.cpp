@@ -1,8 +1,12 @@
-#include "display_widget.h"
-
 #include <QGraphicsPixmapItem>
 #include <QGraphicsScene>
+#include <QMouseEvent>
 #include <QPixmap>
+
+#include "advanced_line_item.h"
+#include "display_widget.h"
+
+#include <iostream>
 
 DisplayWidget::DisplayWidget(QWidget* parent)
     : QGraphicsView(parent)
@@ -25,4 +29,20 @@ DisplayWidget::DisplayWidget(QWidget* parent)
 
     setRenderHint(QPainter::Antialiasing);
     setMouseTracking(true); // Needed for hover events if no item is being dragged
+}
+
+void DisplayWidget::mousePressEvent(QMouseEvent* event)
+{
+    QPointF scene_pos = mapToScene(event->pos());
+
+    QGraphicsItem* clicked_item = scene()->itemAt(scene_pos, transform());
+
+    if (clicked_item) {
+        AdvancedLineItem* advanced_line = qgraphicsitem_cast<AdvancedLineItem*>(clicked_item);
+        if (advanced_line) {
+            std::cout << "advanced line: " << advanced_line->key() << std::endl;
+        }
+    }
+
+    QGraphicsView::mousePressEvent(event);
 }

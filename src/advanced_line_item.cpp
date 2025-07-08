@@ -38,10 +38,10 @@ static qreal distance_to_line_segment(const QPointF& p, const QPointF& p1, const
     return QLineF(p, projection).length();
 }
 
-AdvancedLineItem::AdvancedLineItem(const QPointF& start, const QPointF& end, QGraphicsItem* parent)
+AdvancedLineItem::AdvancedLineItem(std::string key, const QPointF& start, const QPointF& end, QGraphicsItem* parent)
     : QGraphicsObject(parent)
-    , m_start_point(start)
-    , m_end_point(end)
+    , m_key(key)
+    , m_state(AdvancedLineItem::State{ start, end })
     , m_shared_rect_width(60.0)
     , m_shared_rect_height(40.0)
 {
@@ -58,9 +58,9 @@ QRectF AdvancedLineItem::boundingRect() const
 {
     // This is crucial. It must return a rectangle that encloses the entire
     // drawable area of the item, including handles and line thickness.
-    QRectF rect = QRectF(m_start_point, m_end_point).normalized();
+    QRectF rect = QRectF(m_state.start_point, m_state.end_point).normalized();
 
-    QLineF line(m_start_point, m_end_point);
+    QLineF line(m_state.start_point, m_state.end_point);
     qreal angle = line.angle();
 
     // Expand the bounding rect to include the rotated rectangles
@@ -85,7 +85,7 @@ void AdvancedLineItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* 
 
     painter->save();
 
-    QLineF line(m_start_point, m_end_point);
+    QLineF line(m_state.start_point, m_state.end_point);
 
     // Draw the line
     painter->setPen(QPen(Qt::blue, 2));
@@ -94,8 +94,8 @@ void AdvancedLineItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* 
     // Draw endpoint handles
     painter->setBrush(Qt::red);
     painter->setPen(Qt::NoPen);
-    painter->drawEllipse(m_start_point, 5, 5);
-    painter->drawEllipse(m_end_point, 5, 5);
+    painter->drawEllipse(m_state.start_point, 5, 5);
+    painter->drawEllipse(m_state.end_point, 5, 5);
 
     // Draw the rectangles
     QColor rect_color = QColor(Qt::green);
@@ -128,7 +128,7 @@ void AdvancedLineItem::mousePressEvent(QGraphicsSceneMouseEvent* event)
         m_drag_state.dragging = true;
         m_drag_state.active_handle = handle;
         m_drag_state.active_rect_index = rect_index;
-        m_drag_state.drag_start_offset = event->pos() - m_start_point;
+        m_drag_state.drag_start_offset = event->pos() - m_state.start_point;
     }
 
     // If we click on the body but not an endpoint, we let the base class
@@ -157,10 +157,10 @@ void AdvancedLineItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event)
 
     switch (m_drag_state.active_handle) {
     case Handle::StartPoint:
-        m_start_point = pos;
+        m_state.start_point = pos;
         break;
     case Handle::EndPoint:
-        m_end_point = pos;
+        m_state.end_point = pos;
         break;
     case Handle::RectangleResizeLeft:
     case Handle::RectangleResizeRight:
@@ -170,7 +170,7 @@ void AdvancedLineItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event)
     case Handle::RectangleResizeTopRight:
     case Handle::RectangleResizeBottomLeft:
     case Handle::RectangleResizeBottomRight: {
-        QLineF line(m_start_point, m_end_point);
+        QLineF line(m_state.start_point, m_state.end_point);
         qreal angle = line.angle();
         QPointF center_point = line.pointAt(m_rects[m_drag_state.active_rect_index].position_on_line);
 
@@ -229,8 +229,8 @@ QVariant AdvancedLineItem::itemChange(GraphicsItemChange change, const QVariant&
         // value is the new position. The delta is the change from the old position.
         QPointF delta = value.toPointF() - pos();
         // Move our internal points by the same amount.
-        m_start_point += delta;
-        m_end_point += delta;
+        m_state.start_point += delta;
+        m_state.end_point += delta;
     }
     return QGraphicsObject::itemChange(change, value);
 }
@@ -241,13 +241,13 @@ AdvancedLineItem::Handle AdvancedLineItem::get_handle_at_position(const QPointF&
     const int handle_size = 10;
 
     // Check endpoints first (highest priority)
-    if (QRectF(m_start_point - QPointF(handle_size / 2.0, handle_size / 2.0), QSizeF(handle_size, handle_size)).contains(pos))
+    if (QRectF(m_state.start_point - QPointF(handle_size / 2.0, handle_size / 2.0), QSizeF(handle_size, handle_size)).contains(pos))
         return Handle::StartPoint;
-    if (QRectF(m_end_point - QPointF(handle_size / 2.0, handle_size / 2.0), QSizeF(handle_size, handle_size)).contains(pos))
+    if (QRectF(m_state.end_point - QPointF(handle_size / 2.0, handle_size / 2.0), QSizeF(handle_size, handle_size)).contains(pos))
         return Handle::EndPoint;
 
     // Check rectangles
-    QLineF line(m_start_point, m_end_point);
+    QLineF line(m_state.start_point, m_state.end_point);
     qreal angle = line.angle();
     const int resize_border_width = 8;
 
@@ -289,7 +289,7 @@ AdvancedLineItem::Handle AdvancedLineItem::get_handle_at_position(const QPointF&
     }
 
     // Check line body last
-    if (distance_to_line_segment(pos, m_start_point, m_end_point) < 5.0) {
+    if (distance_to_line_segment(pos, m_state.start_point, m_state.end_point) < 5.0) {
         return Handle::Body;
     }
 
@@ -325,7 +325,7 @@ void AdvancedLineItem::update_cursor(const QPointF& pos)
     Qt::CursorShape cursor = Qt::ArrowCursor;
 
     // For resizable handles, calculate the appropriate rotated cursor
-    QLineF line(m_start_point, m_end_point);
+    QLineF line(m_state.start_point, m_state.end_point);
     qreal line_angle = line.angle(); // Angle of the line itself
 
     switch (handle) {
@@ -366,4 +366,14 @@ void AdvancedLineItem::set_num_rects(unsigned int num_rects)
     m_num_rects = num_rects;
     m_rects = linspace(0.0, 1.0, m_num_rects);
     update();
+}
+
+std::string AdvancedLineItem::key()
+{
+    return m_key;
+}
+
+AdvancedLineItem::State& AdvancedLineItem::state()
+{
+    return m_state;
 }

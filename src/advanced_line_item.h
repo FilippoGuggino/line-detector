@@ -4,7 +4,10 @@
 #include <vector>
 
 #include <QGraphicsObject>
+#include <QLayout>
 #include <QPainter>
+#include <QPushButton>
+#include <QWidget>
 
 struct RectangleProperties {
     double position_on_line; // 0.0 to 1.0
@@ -12,6 +15,30 @@ struct RectangleProperties {
 
 class AdvancedLineItem : public QGraphicsObject {
     Q_OBJECT
+
+public:
+    enum { Type = UserType + 1 };
+
+    int type() const override
+    {
+        return Type;
+    }
+
+    struct State {
+        QPointF start_point;
+        QPointF end_point;
+    };
+
+    class ControlPanel : public QWidget {
+    public:
+        ControlPanel(AdvancedLineItem::State& state)
+            : m_state(state)
+        {
+        }
+
+    private:
+        AdvancedLineItem::State& m_state;
+    };
 
 public:
     // Enum for identifying which part of the item is being interacted with
@@ -31,13 +58,15 @@ public:
         RectangleResizeBottomRight
     };
 
-    AdvancedLineItem(const QPointF& start, const QPointF& end, QGraphicsItem* parent = nullptr);
+    AdvancedLineItem(std::string key, const QPointF& start, const QPointF& end, QGraphicsItem* parent = nullptr);
 
     // Required QGraphicsItem overrides
     QRectF boundingRect() const override;
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget = nullptr) override;
 
     void set_num_rects(unsigned int num_rects);
+    std::string key();
+    AdvancedLineItem::State& state();
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
@@ -51,8 +80,8 @@ private:
     Handle get_handle_at_position(const QPointF& pos, int& rect_index_out) const;
     void update_cursor(const QPointF& pos);
 
-    QPointF m_start_point;
-    QPointF m_end_point;
+    std::string m_key;
+    State m_state;
 
     unsigned int m_num_rects = 3;
     std::vector<RectangleProperties> m_rects;

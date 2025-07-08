@@ -12,6 +12,8 @@ class DisplayWidget : public QGraphicsView {
 public:
     explicit DisplayWidget(QWidget* parent = nullptr);
 
+    void mousePressEvent(QMouseEvent* event) override;
+
 private:
     QGraphicsScene* m_scene;
     QGraphicsPixmapItem* m_background_item;
