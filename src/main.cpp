@@ -18,6 +18,9 @@ public:
         m_display_widget = new DisplayWidget(this);
         layout->addWidget(m_display_widget);
 
+        QPixmap pixmap("test-images/banana-bg.jpg");
+        m_display_widget->set_pixmap(pixmap);
+
         AdvancedLineItem* line1 = new AdvancedLineItem(QPointF(50, 50), QPointF(250, 100));
         AdvancedLineItem* line2 = new AdvancedLineItem(QPointF(100, 400), QPointF(400, 300));
 

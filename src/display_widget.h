@@ -11,10 +11,11 @@ class DisplayWidget : public QGraphicsView {
 
 public:
     explicit DisplayWidget(QWidget* parent = nullptr);
+    void set_pixmap(QPixmap pixmap);
 
 private:
     QGraphicsScene* m_scene;
-    QGraphicsPixmapItem* m_background_item;
+    QGraphicsPixmapItem* m_pixmap;
 };
 
 #endif /* DISPLAY_WIDGET_H */
