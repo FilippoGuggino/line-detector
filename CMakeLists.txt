@@ -22,6 +22,7 @@ FetchContent_Declare(
   GIT_TAG v3.4.0 # or a later release
 )
 FetchContent_MakeAvailable(Catch2)
+# -------------------
 
 # ---- spdlog ----
 FetchContent_Declare(
@@ -30,6 +31,7 @@ FetchContent_Declare(
   GIT_TAG v1.15.3
 )
 FetchContent_MakeAvailable(spdlog)
+# -------------------
 
 # ---- argparse ----
 FetchContent_Declare(
@@ -37,8 +39,28 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/p-ranav/argparse.git
 )
 FetchContent_MakeAvailable(argparse)
+# -------------------
 
-# find_package(spdlog)
+# ---- matplotlib-cpp ----
+# find python libraries
+find_package(Python3 COMPONENTS Interpreter Development NumPy REQUIRED)
+find_package(Python 3.0 REQUIRED)
+include_directories(${PYTHON3_INCLUDE_DIRS} ${NumPy_INCLUDE_DIRS})
+
+add_compile_definitions(WITH_OPENCV)
+FetchContent_Declare(
+  matplotlib
+  GIT_REPOSITORY https://github.com/FilippoGuggino/matplotlib-cpp.git
+  GIT_TAG origin/master
+)
+FetchContent_GetProperties(matplotlib)
+
+if(NOT matplotlib_POPULATED)
+    FetchContent_Populate(matplotlib)
+endif()
+
+# -------------------
+
 add_executable(${PROJECT_NAME}
   src/main.cpp
   src/display_widget.cpp
@@ -65,4 +87,5 @@ if(WIN32)
     )
 endif()
 
-target_link_libraries(${PROJECT_NAME} PRIVATE spdlog argparse Qt${QT_VERSION_MAJOR}::Widgets ${OpenCV_LIBS})
+target_link_libraries(${PROJECT_NAME} PRIVATE spdlog argparse Qt${QT_VERSION_MAJOR}::Widgets ${OpenCV_LIBS} ${PYTHON_LIBRARIES} Python3::NumPy)
+target_include_directories(${PROJECT_NAME} PRIVATE ${matplotlib_SOURCE_DIR})
