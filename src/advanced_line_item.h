@@ -10,6 +10,18 @@ struct RectangleProperties {
     double position_on_line; // 0.0 to 1.0
 };
 
+struct PolarCoordRectangle {
+    double angle;
+    double r;
+    double width;
+    double height;
+};
+
+struct AdvancedLineOutput {
+    double angle;
+    std::vector<std::array<QPointF, 4>> rects;
+};
+
 class AdvancedLineItem : public QGraphicsObject {
     Q_OBJECT
 
@@ -38,7 +50,8 @@ public:
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget = nullptr) override;
 
     void set_num_rects(unsigned int num_rects);
-    std::vector<QPointF> get_rect_regions() const;
+    // std::vector<QPolygonF> get_rect_regions() const;
+    AdvancedLineOutput get_rect_regions() const;
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;

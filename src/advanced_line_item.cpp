@@ -6,6 +6,8 @@
 #include <QTransform>
 #include <QtMath>
 
+#include <iostream>
+
 static std::vector<RectangleProperties> linspace(double start, double end, unsigned int num, bool endpoint = false)
 {
     std::vector<RectangleProperties> out;
@@ -119,8 +121,6 @@ void AdvancedLineItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* 
 
 void AdvancedLineItem::mousePressEvent(QGraphicsSceneMouseEvent* event)
 {
-    get_rect_regions();
-
     m_drag_state = DragState();
 
     int rect_index = -1;
@@ -370,10 +370,18 @@ void AdvancedLineItem::set_num_rects(unsigned int num_rects)
     update();
 }
 
-std::vector<QPointF> AdvancedLineItem::get_rect_regions() const
+static double distance(const QPointF& p1, const QPointF& p2)
+{
+    return std::sqrt(std::pow(p2.x() - p1.x(), 2) + std::pow(p2.y() - p1.y(), 2));
+}
+
+AdvancedLineOutput AdvancedLineItem::get_rect_regions() const
 {
     QLineF line(m_start_point, m_end_point);
     qreal angle = line.angle();
+
+    AdvancedLineOutput out;
+    out.angle = angle;
 
     for (const auto& rect : m_rects) {
         QPointF center_point = line.pointAt(rect.position_on_line);
@@ -385,16 +393,67 @@ std::vector<QPointF> AdvancedLineItem::get_rect_regions() const
         QPointF bottom_right = rectangle.bottomRight();
 
         QTransform transform;
-        transform.rotate(-angle, Qt::XAxis);
         transform.translate(center_point.x(), center_point.y());
+        transform.rotate(-angle);
 
         QPointF top_left_transformed = transform.map(top_left);
         QPointF top_right_transformed = transform.map(top_right);
         QPointF bottom_left_transformed = transform.map(bottom_left);
         QPointF bottom_right_transformed = transform.map(bottom_right);
+        out.rects.push_back({ top_left_transformed, top_right_transformed, bottom_right_transformed, bottom_left_transformed });
 
         qDebug() << top_left_transformed << top_right_transformed << bottom_left_transformed << bottom_right_transformed;
     }
 
-    return std::vector<QPointF>();
+    return out;
 }
+
+// std::vector<PolarCoordRectangle> AdvancedLineItem::get_rect_regions() const
+// {
+//     QLineF line(m_start_point, m_end_point);
+//     qreal angle = line.angle();
+
+//     std::vector<PolarCoordRectangle> out;
+
+//     for (const auto& rect : m_rects) {
+//         QPointF center_point = line.pointAt(rect.position_on_line);
+//         PolarCoordRectangle p{ angle, distance(QPointF(0.0f, 0.0f), center_point), m_shared_rect_width, m_shared_rect_height };
+//         out.push_back(p);
+//     }
+
+//     return out;
+// }
+
+// std::vector<QPolygonF> AdvancedLineItem::get_rect_regions() const
+// {
+//     QLineF line(m_start_point, m_end_point);
+//     qreal angle = line.angle();
+
+//     std::cout << "angle: " << angle << std::endl;
+
+//     std::vector<QPolygonF> out;
+
+//     for (const auto& rect : m_rects) {
+//         QPointF center_point = line.pointAt(rect.position_on_line);
+//         QRectF rectangle(-m_shared_rect_width / 2, -m_shared_rect_height / 2, m_shared_rect_width, m_shared_rect_height);
+
+//         QPointF top_left = rectangle.topLeft();
+//         QPointF top_right = rectangle.topRight();
+//         QPointF bottom_left = rectangle.bottomLeft();
+//         QPointF bottom_right = rectangle.bottomRight();
+
+//         QTransform transform;
+//         transform.translate(center_point.x(), center_point.y());
+//         transform.rotate(-angle);
+//         out.push_back(transform.map(rectangle));
+
+//         // QPointF top_left_transformed = transform.map(top_left);
+//         // QPointF top_right_transformed = transform.map(top_right);
+//         // QPointF bottom_left_transformed = transform.map(bottom_left);
+//         // QPointF bottom_right_transformed = transform.map(bottom_right);
+
+//         // qDebug() << top_left_transformed << top_right_transformed << bottom_left_transformed << bottom_right_transformed;
+//     }
+
+//     return out;
+// }

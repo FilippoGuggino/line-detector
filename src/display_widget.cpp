@@ -19,7 +19,7 @@ DisplayWidget::DisplayWidget(QWidget* parent)
 
 void DisplayWidget::set_pixmap(QPixmap pixmap)
 {
-    pixmap = pixmap.scaled(scene()->width(), scene()->height());
+    m_scene->setSceneRect(0, 0, pixmap.height(), pixmap.width());
     m_pixmap = scene()->addPixmap(pixmap);
     m_pixmap->setZValue(-1); // Ensure it's drawn behind everything else
 }
