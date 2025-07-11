@@ -106,80 +106,128 @@ static QPointF get_rect_center(const std::array<QPointF, 4>& corners)
     return QPointF(sumX / 4.0, sumY / 4.0);
 }
 
-static cv::Rect get_bounding_rect(const std::vector<std::array<QPointF, 4>>& rects)
+static cv::Rect get_bounding_rect(const std::vector<cv::RotatedRect>& rects, int max_width, int max_height)
 {
-    std::vector<QPointF> all_corners;
-    // TODO maybe only first and last rects are necessary
-    for (auto& rect : rects) {
-        QPointF rect_center = get_rect_center(rect);
-        all_corners.insert(std::end(all_corners), std::begin(rect), std::end(rect));
+    std::vector<cv::Point2f> all_corners;
+    // only first and last rects are necessary
+    for (auto& rect : { *rects.begin(), *rects.rbegin() }) {
+        std::array<cv::Point2f, 4> points;
+        rect.points(points.data());
+        all_corners.insert(std::end(all_corners), std::begin(points), std::end(points));
     }
 
-    auto [min_x, max_x] = std::minmax_element(std::begin(all_corners), std::end(all_corners), [](QPointF& p1, QPointF& p2) {
-        return p1.x() < p2.x();
+    auto [min_x, max_x] = std::minmax_element(std::begin(all_corners), std::end(all_corners), [](cv::Point2f& p1, cv::Point2f& p2) {
+        return p1.x < p2.x;
     });
 
-    auto [min_y, max_y] = std::minmax_element(std::begin(all_corners), std::end(all_corners), [](QPointF& p1, QPointF& p2) {
-        return p1.y() < p2.y();
+    auto [min_y, max_y] = std::minmax_element(std::begin(all_corners), std::end(all_corners), [](cv::Point2f& p1, cv::Point2f& p2) {
+        return p1.y < p2.y;
     });
 
-    return cv::Rect(min_x->x(), min_y->y(), max_x->x() - min_x->x(), max_y->y() - min_y->y());
+    const int kPadding = 5;
+
+    // retrieve rect coordinates + bound checking
+    int x = std::clamp<int>(min_x->x - kPadding, 0, max_width - 1);
+    int y = std::clamp<int>(min_y->y - kPadding, 0, max_height - 1);
+    int width = std::clamp<int>(max_x->x - x + kPadding, 1, max_width - x);
+    int height = std::clamp<int>(max_y->y - y + kPadding, 1, max_height - y);
+
+    return cv::Rect(x, y, width, height);
+    // return cv::Rect(min_x->x, min_y->y, max_x->x - min_x->x, max_y->y - min_y->y);
 }
 
-static std::vector<cv::Mat> get_tiles(cv::Mat bgr_img, const AdvancedLineOutput& line_out)
+static cv::Mat get_translation_matrix(double tx, double ty)
 {
+    cv::Mat translation = (cv::Mat_<double>(3, 3) << 1.0, 0.0, tx,
+        0.0, 1.0, ty,
+        0.0, 0.0, 1.0);
+    return translation;
+}
+
+static cv::Mat get_rotation_matrix(double angle)
+{
+    double c = std::cos(angle * M_PI / 180.0);
+    double s = std::sin(angle * M_PI / 180.0);
+
+    cv::Mat R = (cv::Mat_<double>(3, 3) << c, -s, 0,
+        s, c, 0,
+        0, 0, 1);
+
+    return R;
+}
+
+static cv::RotatedRect transform_rotated_rect(const cv::RotatedRect& rect, const cv::Mat& mat)
+{
+    // Step 1: Get the corner points of the original rect
+    std::array<cv::Point2f, 4> corners;
+    rect.points(corners.data());
+
+    std::vector<cv::Point2f> transformedPoints;
+
+    // Step 3: Apply affine transform
+    cv::transform(corners, transformedPoints, mat);
+
+    // Step 4: Create new RotatedRect from transformed points
+    return cv::minAreaRect(transformedPoints);
+}
+
+static std::vector<cv::Mat> get_tiles(cv::Mat bgr_img, const std::vector<cv::RotatedRect>& rects)
+{
+    // all angles should be the same
+    double angle = rects[0].angle;
+
     // cv::Mat rotated_img = rotate_image(bgr_img, polar_rects[0].angle);
 
-    cv::Rect bbox = get_bounding_rect(line_out.rects);
-    cv::Mat mask(bgr_img.rows, bgr_img.cols, CV_8UC1, cv::Scalar(0));
+    cv::Rect bbox = get_bounding_rect(rects, bgr_img.cols, bgr_img.rows);
+    // cv::Mat mask(bgr_img.rows, bgr_img.cols, CV_8UC1, cv::Scalar(0));
 
-    mask(bbox).setTo(255);
+    // mask(bbox).setTo(255);
 
     // for (auto& rect : line_out.rects) {
     //     cv::Mat line_mask = create_cv_mask(bgr_img.rows, bgr_img.cols, rect);
     //     cv::bitwise_not(line_mask, line_mask);
     //     cv::bitwise_and(mask, line_mask, mask);
     // }
-    cv::Mat line_mask = create_cv_mask(bgr_img.rows, bgr_img.cols, line_out.rects[0]);
-    cv::bitwise_not(line_mask, line_mask);
-    cv::bitwise_and(mask, line_mask, mask);
+    // cv::Mat line_mask = create_cv_mask(bgr_img.rows, bgr_img.cols, line_out.rects[0]);
+    // cv::bitwise_not(line_mask, line_mask);
+    // cv::bitwise_and(mask, line_mask, mask);
 
     cv::Mat cropped_img;
     bgr_img(bbox).copyTo(cropped_img);
 
-    unsigned int n_rows = 2;
-    unsigned int n_cols = 3;
-    unsigned int i = 1;
+    plt::imshow(cropped_img);
+    plt::show();
 
-    // plt::subplot(n_rows, n_cols, i++);
-    // plt::title("img");
-    // plt::imshow(bgr_img);
-
-    mask = rotate_image(mask, -line_out.angle);
-    cv::Mat rotated_cropped_img = rotate_image(cropped_img, -line_out.angle);
+    cv::Mat rotated_cropped_img = rotate_image(cropped_img, angle);
+    plt::imshow(rotated_cropped_img);
+    plt::show();
 
     cv::Point2f bbox_center = (bbox.br() + bbox.tl()) * 0.5 - bbox.tl();
     cv::circle(cropped_img, bbox_center, 2, cv::Scalar(128));
     std::cout << "bbox center: " << "(" << bbox_center.x << ", " << bbox_center.y << ")" << std::endl;
 
-    QTransform transform;
-    transform.translate(rotated_cropped_img.cols / 2.0, rotated_cropped_img.rows / 2.0);
-    transform.rotate(line_out.angle);
-    transform.translate(-bbox_center.x, -bbox_center.y);
-    transform.translate(-bbox.x, -bbox.y);
-    std::cout << "bbox.x: " << bbox.x << " bbox.y: " << bbox.y << std::endl;
-    for (const auto& rect : line_out.rects) {
-        std::vector<QPointF> p;
-        for (const QPointF& point : rect) {
-            cv::circle(cropped_img, cv::Point2i(point.x(), point.y()), 2, cv::Scalar(128));
-            QPointF transformed_p = transform.map(point);
-            qDebug() << "point: " << point << " transformed point: " << transformed_p;
-            // cv::circle(rotated_cropped_img, cv::Point2i(transformed_p.x(), transformed_p.y()), 2, cv::Scalar(128));
-            p.push_back(transformed_p);
-        }
+    cv::Mat M = get_translation_matrix(rotated_cropped_img.cols / 2.0, rotated_cropped_img.rows / 2.0)
+        * get_rotation_matrix(-angle)
+        * get_translation_matrix(-bbox_center.x, -bbox_center.y)
+        * get_translation_matrix(-bbox.x, -bbox.y);
 
-        cv::Rect r(p[0].x(), p[0].y(), std::abs(p[1].x() - p[0].x()), std::abs(p[2].y() - p[1].y()));
+    for (const auto& rect : rects) {
+        std::array<cv::Point2f, 4> corners;
+        rect.points(corners.data());
 
+        // transformed corners, ordered clockwise starting from bottom-left corner
+        std::array<cv::Point2f, 4> p;
+
+        cv::perspectiveTransform(corners, p, M);
+
+        // retrieve rect coordinates + bound checking
+        int x = std::clamp<int>(std::lround(p[1].x), 0, rotated_cropped_img.cols);
+        int y = std::clamp<int>(std::lround(p[1].y), 0, rotated_cropped_img.rows);
+        int width = std::clamp<int>(std::lround(std::abs(p[2].x - x)), 1, rotated_cropped_img.cols - x);
+        int height = std::clamp<int>(std::lround(std::abs(p[0].y - y)), 1, rotated_cropped_img.rows - y);
+
+        cv::Rect r(x, y, width, height);
+        // cv::Rect r(p[1].x, p[1].y, std::abs(p[2].x - p[1].x), std::abs(p[0].y - p[1].y));
         cv::Mat prova;
         rotated_cropped_img(r).copyTo(prova);
         plt::imshow(prova);
@@ -211,19 +259,19 @@ static std::vector<cv::Mat> get_tiles(cv::Mat bgr_img, const AdvancedLineOutput&
     //     }
     // }
 
-    plt::subplot(n_rows, n_cols, i++);
-    plt::title("mask");
-    plt::imshow(mask);
-    plt::subplot(n_rows, n_cols, i++);
-    plt::title("cropped_img");
-    plt::imshow(cropped_img);
-    plt::subplot(n_rows, n_cols, i++);
-    plt::title("rotated mask");
-    plt::imshow(mask);
-    plt::subplot(n_rows, n_cols, i++);
-    plt::title("rotated cropped_img");
-    plt::imshow(rotated_cropped_img);
-    plt::show();
+    // plt::subplot(n_rows, n_cols, i++);
+    // plt::title("mask");
+    // plt::imshow(mask);
+    // plt::subplot(n_rows, n_cols, i++);
+    // plt::title("cropped_img");
+    // plt::imshow(cropped_img);
+    // plt::subplot(n_rows, n_cols, i++);
+    // plt::title("rotated mask");
+    // plt::imshow(mask);
+    // plt::subplot(n_rows, n_cols, i++);
+    // plt::title("rotated cropped_img");
+    // plt::imshow(rotated_cropped_img);
+    // plt::show();
 
     // for (auto& polar_rect : polar_rects) {
 
@@ -320,8 +368,8 @@ public:
         //     std::vector<cv::Mat> tiles = get_tiles(bgr_img, pol);
         // }
         {
-            AdvancedLineOutput pol = line2->get_rect_regions();
-            std::vector<cv::Mat> tiles = get_tiles(bgr_img, pol);
+            std::vector<cv::RotatedRect> rects = line2->get_rect_regions();
+            std::vector<cv::Mat> tiles = get_tiles(bgr_img, rects);
         }
         // {
         //     std::vector<QPolygonF> pol = line1->get_rect_regions();

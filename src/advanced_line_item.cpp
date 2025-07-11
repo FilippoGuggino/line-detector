@@ -375,35 +375,22 @@ static double distance(const QPointF& p1, const QPointF& p2)
     return std::sqrt(std::pow(p2.x() - p1.x(), 2) + std::pow(p2.y() - p1.y(), 2));
 }
 
-AdvancedLineOutput AdvancedLineItem::get_rect_regions() const
+static cv::Point2f qpoint_to_cvpoint(QPointF point)
+{
+    return cv::Point2f(point.x(), point.y());
+}
+
+std::vector<cv::RotatedRect> AdvancedLineItem::get_rect_regions() const
 {
     QLineF line(m_start_point, m_end_point);
-    qreal angle = line.angle();
+    double angle = line.angle();
 
-    AdvancedLineOutput out;
-    out.angle = angle;
+    std::vector<cv::RotatedRect> out(m_rects.size());
 
-    for (const auto& rect : m_rects) {
+    std::transform(std::begin(m_rects), std::end(m_rects), std::begin(out), [&](const RectangleProperties& rect) {
         QPointF center_point = line.pointAt(rect.position_on_line);
-        QRectF rectangle(-m_shared_rect_width / 2, -m_shared_rect_height / 2, m_shared_rect_width, m_shared_rect_height);
-
-        QPointF top_left = rectangle.topLeft();
-        QPointF top_right = rectangle.topRight();
-        QPointF bottom_left = rectangle.bottomLeft();
-        QPointF bottom_right = rectangle.bottomRight();
-
-        QTransform transform;
-        transform.translate(center_point.x(), center_point.y());
-        transform.rotate(-angle);
-
-        QPointF top_left_transformed = transform.map(top_left);
-        QPointF top_right_transformed = transform.map(top_right);
-        QPointF bottom_left_transformed = transform.map(bottom_left);
-        QPointF bottom_right_transformed = transform.map(bottom_right);
-        out.rects.push_back({ top_left_transformed, top_right_transformed, bottom_right_transformed, bottom_left_transformed });
-
-        qDebug() << top_left_transformed << top_right_transformed << bottom_left_transformed << bottom_right_transformed;
-    }
+        return cv::RotatedRect(qpoint_to_cvpoint(center_point), cv::Size(m_shared_rect_width, m_shared_rect_height), -angle);
+    });
 
     return out;
 }

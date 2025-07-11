@@ -6,6 +6,8 @@
 #include <QGraphicsObject>
 #include <QPainter>
 
+#include <opencv2/opencv.hpp>
+
 struct RectangleProperties {
     double position_on_line; // 0.0 to 1.0
 };
@@ -51,7 +53,7 @@ public:
 
     void set_num_rects(unsigned int num_rects);
     // std::vector<QPolygonF> get_rect_regions() const;
-    AdvancedLineOutput get_rect_regions() const;
+    std::vector<cv::RotatedRect> get_rect_regions() const;
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
