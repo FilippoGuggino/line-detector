@@ -40,11 +40,13 @@ static qreal distance_to_line_segment(const QPointF& p, const QPointF& p1, const
 
 AdvancedLineItem::AdvancedLineItem(const QPointF& start, const QPointF& end, QGraphicsItem* parent)
     : QGraphicsObject(parent)
-    , m_start_point(start)
-    , m_end_point(end)
+    , m_start_point(0, 0) // The start point is the origin of the item.
+    , m_end_point(end - start) // The end point is relative to the start point.
     , m_shared_rect_width(60.0)
     , m_shared_rect_height(40.0)
 {
+    setPos(start);
+
     setAcceptHoverEvents(true);
     // This flag lets the scene handle moving the entire object.
     // We will intercept the move in itemChange() to update our points.
@@ -221,20 +223,6 @@ void AdvancedLineItem::hoverLeaveEvent(QGraphicsSceneHoverEvent* event)
     QGraphicsObject::hoverLeaveEvent(event);
 }
 
-QVariant AdvancedLineItem::itemChange(GraphicsItemChange change, const QVariant& value)
-{
-    // This function is called by the scene when the item's state changes.
-    // We are interested in when its position changes due to being moved.
-    if (change == ItemPositionHasChanged && scene()) {
-        // value is the new position. The delta is the change from the old position.
-        QPointF delta = value.toPointF() - pos();
-        // Move our internal points by the same amount.
-        m_start_point += delta;
-        m_end_point += delta;
-    }
-    return QGraphicsObject::itemChange(change, value);
-}
-
 AdvancedLineItem::Handle AdvancedLineItem::get_handle_at_position(const QPointF& pos, int& rect_index_out) const
 {
     rect_index_out = -1;
@@ -366,4 +354,28 @@ void AdvancedLineItem::set_num_rects(unsigned int num_rects)
     m_num_rects = num_rects;
     m_rects = linspace(0.0, 1.0, m_num_rects);
     update();
+}
+
+static cv::Point2f to_cv(QPointF point)
+{
+    return cv::Point2f(point.x(), point.y());
+}
+
+std::vector<cv::RotatedRect> AdvancedLineItem::get_rect_regions() const
+{
+    QLineF line(m_start_point, m_end_point);
+    double angle = std::fmod(360.0 - line.angle(), 360.0); // Use 360- to match OpenCV's convention
+
+    std::vector<cv::RotatedRect> out(m_rects.size());
+
+    std::transform(std::begin(m_rects), std::end(m_rects), std::begin(out), [&](const RectangleProperties& rect) {
+        QPointF local_center_point = line.pointAt(rect.position_on_line);
+
+        // Map the local center point to scene coordinates
+        QPointF scene_center_point = mapToScene(local_center_point);
+
+        return cv::RotatedRect(to_cv(scene_center_point), cv::Size2f(m_shared_rect_width, m_shared_rect_height), angle);
+    });
+
+    return out;
 }

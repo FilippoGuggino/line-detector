@@ -6,6 +6,8 @@
 #include <QGraphicsObject>
 #include <QPainter>
 
+#include <opencv2/opencv.hpp>
+
 struct RectangleProperties {
     double position_on_line; // 0.0 to 1.0
 };
@@ -38,6 +40,7 @@ public:
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget = nullptr) override;
 
     void set_num_rects(unsigned int num_rects);
+    std::vector<cv::RotatedRect> get_rect_regions() const;
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
@@ -45,7 +48,6 @@ protected:
     void mouseReleaseEvent(QGraphicsSceneMouseEvent* event) override;
     void hoverMoveEvent(QGraphicsSceneHoverEvent* event) override;
     void hoverLeaveEvent(QGraphicsSceneHoverEvent* event) override;
-    QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
 
 private:
     Handle get_handle_at_position(const QPointF& pos, int& rect_index_out) const;
